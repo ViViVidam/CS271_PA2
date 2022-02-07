@@ -146,7 +146,7 @@ class Client:
         val = 0
         while(1):
             while (val != 't' and val != 'c' and val != 's' and val !='d'):
-                val = input("May I help you? (t for transfer, c for check balance , s for snapshot, to view the snapshots: d): ")
+                val = input("May I help you? (t for transfer, c for check balance , s for snapshot, to view the snapshots: d): \n")
             if val == 'c':
                 val = 0
                 print("your deposit: {}".format(self.deposit))
