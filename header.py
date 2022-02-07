@@ -1,3 +1,6 @@
+import threading
+import time
+
 clientIPs = [("127.0.0.1",5051),("127.0.0.1",5052),("127.0.0.1",5053),("127.0.0.1",5054)]
 TEST = 1
 NORMAL = 2
@@ -12,6 +15,19 @@ CLIENTNUM = len(clientIPs)
 globalSnapshots = []
 finished = []
 globalStates = []
+
+def monitor():
+    lock = threading.Lock()
+    while 1:
+        time.sleep(6)
+        with lock:
+            print("\n\n*************FROM GLOBAL MONITOR****************",flush=True)
+            for i in range(len(globalSnapshots)):
+                print("\n-----------SNAPSHOT {}----------".format(globalSnapshots[i]),flush=True)
+                print("clients that have submitted the snapshot: {}\n".format(finished[i],flush=True))
+                printGlobalState(i)
+                print("----------------------------------\n",flush=True)
+            print("****************************************************\n\n",flush=True)
 
 class State:
     def __init__(self,deposit,identifier,channelCount):

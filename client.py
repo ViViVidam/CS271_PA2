@@ -129,8 +129,8 @@ class Client:
     def read(self):
         val = 0
         while(1):
-            while (val != 't' and val != 'c' and val != 's'):
-                val = input("May I help you? (t for transfer, c for check balance , s for snapshot): ")
+            while (val != 't' and val != 'c' and val != 's' and val !='d'):
+                val = input("May I help you? (t for transfer, c for check balance , s for snapshot, to view the snapshots: d): ")
             if val == 'c':
                 val = 0
                 print("your deposit: {}".format(self.deposit))
@@ -156,6 +156,16 @@ class Client:
                 self.initSnapshot(self.id,(self.id,self.clock))
                 with self.lock:
                     self.clock += 1
+            elif val == 'd':
+                val = 0
+                with self.lock:
+                    print("\n\n*************FROM GLOBAL MONITOR****************", flush=True)
+                    for i in range(len(globalSnapshots)):
+                        print("\n-----------SNAPSHOT {}----------".format(globalSnapshots[i]), flush=True)
+                        print("clients that have submitted the snapshot: {}\n".format(finished[i], flush=True))
+                        printGlobalState(i)
+                        print("----------------------------------\n", flush=True)
+                    print("****************************************************\n\n", flush=True)
             else:
                 print("invalid input {}".format(val))
     def test(self):
