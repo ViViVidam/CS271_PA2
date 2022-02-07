@@ -145,14 +145,8 @@ class Client:
     def read(self):
         val = 0
         while(1):
-<<<<<<< HEAD
             while (val != 't' and val != 'c' and val != 's' and val !='d'):
                 val = input("May I help you? (t for transfer, c for check balance , s for snapshot, to view the snapshots: d): ")
-=======
-            while (val != 't' and val != 'c' and val != 's'):
-                val = input(
-                    "May I help you? (t for transfer, c for check balance , s for snapshot): \n")
->>>>>>> 90ae43a1ac48cbda48b5ad7658de0093ba115707
             if val == 'c':
                 val = 0
                 print("your deposit: {}".format(self.deposit))
