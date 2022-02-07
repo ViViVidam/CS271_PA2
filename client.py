@@ -5,6 +5,7 @@ import json
 import sys
 from header import *
 
+
 class UDPSocket:
     buffersize = 1024
 
@@ -14,7 +15,7 @@ class UDPSocket:
         self.UDPsocket.bind(self.address)
 
     def sendMessage(self, message, ip):
-        time.sleep(0.5)
+        time.sleep(3)
         msgByte = str.encode(json.dumps(message))
         self.UDPsocket.sendto(msgByte, ip)
 
@@ -25,15 +26,15 @@ class UDPSocket:
 
 
 class Client:
-    def __init__(self,id,mode):
-        self.mode = mode # 1:normal 2:test
+    def __init__(self, id, mode):
+        self.mode = mode  # 1:normal 2:test
         self.socket = UDPSocket(id)
         self.id = id
         self.lock = threading.Lock()
         self.clock = 0
 
         self.deposit = 10
-        self.finish = False #for test
+        self.finish = False  # for test
         self.states = []
         self.markersRecv = []
         self.outChannel = []
@@ -45,18 +46,20 @@ class Client:
                 self.inChannel.append(i)
 
         self.channelSize = len(self.inChannel)
-    def getStateIndex(self,identifier):
+
+    def getStateIndex(self, identifier):
         identifier = tuple(identifier)
         with self.lock:
             for state in self.states:
                 if identifier == state.identifier:
                     return self.states.index(state)
             return -1
-    def initSnapshot(self,sender,sequence):
-        tempStateId = 0 #two init snapshot is possible, so it might overwrite the actual id we need to validate
+
+    def initSnapshot(self, sender, sequence):
+        tempStateId = 0  # two init snapshot is possible, so it might overwrite the actual id we need to validate
         with self.lock:
             print("{} initial a snapshot with tag {}".format(self.id, sequence))
-            temp = State(self.deposit,sequence,self.channelSize)
+            temp = State(self.deposit, sequence, self.channelSize)
             if tuple(sequence) not in globalSnapshots:
                 globalSnapshots.append(tuple(sequence))
                 finished.append([])
@@ -64,7 +67,7 @@ class Client:
             self.states.append(temp)
             tmpBuf = []
             for i in range(CLIENTNUM):
-                if(clientGraph[i][self.id]==0):
+                if(clientGraph[i][self.id] == 0):
                     tmpBuf.append(1)
                 else:
                     tmpBuf.append(0)
@@ -73,18 +76,23 @@ class Client:
             tempStateId = len(self.markersRecv) - 1
         self.checkRecv(tempStateId)
         payload = {'id': self.id, 'op': MARKER, 'data': sequence}
-        self.broadcastMARKER(sender,payload)
+        self.broadcastMARKER(sender, payload)
 
-    def broadcastMARKER(self,sender,data):
+    def broadcastMARKER(self, sender, data):
         stateIndex = self.getStateIndex(data['data'])
         for client in self.outChannel:
-                print("{} broadcast states{}'s (tag {}) MARKER to {}".format(self.id, stateIndex, data['data'], client))
-                self.socket.sendMessage(data,clientIPs[client])
-    def endSnapshot(self,stateIndex):
+            print("{} broadcast states{}'s (tag {}) MARKER to {}".format(
+                self.id, stateIndex, data['data'], client))
+            self.socket.sendMessage(data, clientIPs[client])
+
+    def endSnapshot(self, stateIndex):
         with self.lock:
-            finished[globalSnapshots.index(self.states[stateIndex].identifier)].append(self.id)
-            print("{} Ending Snapshot. State identifier {}".format(self.id,self.states[stateIndex].identifier), flush=True)
-            submit_states(self.states[stateIndex].identifier,self.id,self.states[stateIndex])
+            finished[globalSnapshots.index(
+                self.states[stateIndex].identifier)].append(self.id)
+            print("{} Ending Snapshot. State identifier {}".format(
+                self.id, self.states[stateIndex].identifier), flush=True)
+            submit_states(self.states[stateIndex].identifier,
+                          self.id, self.states[stateIndex])
             '''
             print("{} deposit {}".format(self.id,self.states[stateIndex].deposit), flush=True)
             for index in range(self.channelSize):
@@ -92,14 +100,19 @@ class Client:
             '''
             self.states.pop(stateIndex)
             self.markersRecv.pop(stateIndex)
-    def record(self,clientId,transaction):
-        print("{} safe {} corresponding channel message {}".format(self.id,clientId,transaction))
+
+    def record(self, clientId, transaction):
+        print("{} safe {} corresponding channel message {}".format(
+            self.id, clientId, transaction))
         with self.lock:
             for i in range(len(self.states)):
                 if self.markersRecv[i][clientId] == 0:
-                    self.states[i].record(self.inChannel.index(clientId),transaction)
-    def checkRecv(self,stateIndex):
-        print("{} recv state {} {}".format(self.id,self.states[stateIndex].identifier,self.markersRecv[stateIndex]))
+                    self.states[i].record(
+                        self.inChannel.index(clientId), transaction)
+
+    def checkRecv(self, stateIndex):
+        print("{} recv state {} {}".format(
+            self.id, self.states[stateIndex].identifier, self.markersRecv[stateIndex]))
         flag = 0
         for item in self.markersRecv[stateIndex]:
             if item != 1:
@@ -107,30 +120,34 @@ class Client:
                 break
         if flag == 0:
             self.endSnapshot(stateIndex)
+
     def listen(self):
         while(1):
-            data,sender=self.socket.recvMessage()
+            data, sender = self.socket.recvMessage()
             if data['op'] == BANK:
                 with self.lock:
                     self.deposit += data['data']
-                print("{} transfer received {}".format(self.id,data['data']))
+                print("{} transfer received {}".format(self.id, data['data']))
                 if len(self.states) != 0:
-                    self.record(data['id'],(data['id'],data['data']))
+                    self.record(data['id'], (data['id'], data['data']))
             elif data['op'] == MARKER:
-                print("{} received MARKER from {} with tag {}".format(self.id, data['id'], data['data']))
+                print("{} received MARKER from {} with tag {}".format(
+                    self.id, data['id'], data['data']))
                 stateIndex = self.getStateIndex(data['data'])
                 if stateIndex == -1:
-                    self.initSnapshot(data['id'],data['data'])
+                    self.initSnapshot(data['id'], data['data'])
                     with self.lock:
                         self.clock += 1
                 else:
                     self.markersRecv[stateIndex][data['id']] = 1
                     self.checkRecv(stateIndex)
+
     def read(self):
         val = 0
         while(1):
             while (val != 't' and val != 'c' and val != 's'):
-                val = input("May I help you? (t for transfer, c for check balance , s for snapshot): ")
+                val = input(
+                    "May I help you? (t for transfer, c for check balance , s for snapshot): \n")
             if val == 'c':
                 val = 0
                 print("your deposit: {}".format(self.deposit))
@@ -139,25 +156,29 @@ class Client:
                 while(1):
                     val = input("to who? (0-3): ")
                     val = int(val)
-                    if val < 3 and val >= 0 and clientGraph[self.id][val] == 1:
+                    if val <= 3 and val >= 0 and clientGraph[self.id][val] == 1:
                         break
                 money = input('how much ?')
                 money = int(money)
                 if(self.deposit < money):
                     print("INSUFFICIENT BALANCE")
                 else:
-                    payload = {'id':self.id,'op':BANK,'data':money}
-                    self.socket.sendMessage(payload,clientIPs[val])
+                    print("your deposit: {}".format(self.deposit))
+                    payload = {'id': self.id, 'op': BANK, 'data': money}
+                    self.socket.sendMessage(payload, clientIPs[val])
                     with self.lock:
                         self.deposit -= money
+                    print('SUCCESS')
+                    print("your deposit: {}".format(self.deposit))
             elif val == 's':
                 val = 0
                 ### tag: (id, clock)
-                self.initSnapshot(self.id,(self.id,self.clock))
+                self.initSnapshot(self.id, (self.id, self.clock))
                 with self.lock:
                     self.clock += 1
             else:
                 print("invalid input {}".format(val))
+
     def test(self):
         file = open("test{}".format(self.id))
         for line in file.readlines():
@@ -174,9 +195,10 @@ class Client:
                 if(self.deposit < money):
                     print("INSUFFICIENT BALANCE")
                 else:
-                    print("{} transfer {} to {}".format(self.id,money,operations[2]))
-                    payload = {'id':self.id,'op':BANK,'data':money}
-                    self.socket.sendMessage(payload,clientIPs[operations[2]])
+                    print("{} transfer {} to {}".format(
+                        self.id, money, operations[2]))
+                    payload = {'id': self.id, 'op': BANK, 'data': money}
+                    self.socket.sendMessage(payload, clientIPs[operations[2]])
                     with self.lock:
                         self.deposit -= money
             time.sleep(2)
@@ -192,7 +214,9 @@ class Client:
         sendThread.start()
         listenThread.join()
         sendThread.join()
+
+
 if __name__ == '__main__':
-    client = Client(int(sys.argv[1]),NORMAL)
+    client = Client(int(sys.argv[1]), NORMAL)
     print("{} client started\nlistening...".format(client.id))
     client.run()
