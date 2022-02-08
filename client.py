@@ -128,6 +128,7 @@ class Client:
             elif data['op'] == MARKER:
                 print("{} received MARKER from {} with tag {}".format(
                     self.id, data['id'], data['data']))
+                self.record(data['id'], (data['id'], data['data']))
                 stateIndex = self.getStateIndex(data['data'])
                 if stateIndex == -1:
                     self.initSnapshot(data['id'], data['data'])
