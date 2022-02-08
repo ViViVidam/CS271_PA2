@@ -93,9 +93,6 @@ class Client:
                 self.id, self.states[stateIndex].identifier), flush=True)
             submit_states(self.states[stateIndex].identifier,
                           self.id, self.states[stateIndex])
-            print("{} deposit {}".format(self.id,self.states[stateIndex].deposit), flush=True)
-            for index in range(self.channelSize):
-                print("{} incoming channel {} {}:".format(self.id,self.inChannel[index],self.states[stateIndex].channelMessages[index]), flush=True)
             self.states.pop(stateIndex)
             self.markersRecv.pop(stateIndex)
 
@@ -211,6 +208,7 @@ class Client:
             time.sleep(2)
 
     def run(self):
+        threading.Thread(target=monitor).start()
         listenThread = threading.Thread(target=self.listen)
         if self.mode == TEST:
             sendThread = threading.Thread(target=self.test)
