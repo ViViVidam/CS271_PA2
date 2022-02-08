@@ -5,7 +5,6 @@ import json
 import sys
 from header import *
 
-
 class UDPSocket:
     buffersize = 1024
 
@@ -56,9 +55,8 @@ class Client:
             return -1
 
     def initSnapshot(self, sender, sequence):
-        tempStateId = 0  # two init snapshot is possible, so it might overwrite the actual id we need to validate
         with self.lock:
-            print("{} initial a snapshot with tag {}".format(self.id, sequence))
+            print("{} initial a snapshot with tag {} {}".format(self.id, sequence, self.deposit))
             temp = State(self.deposit, sequence, self.channelSize)
             if tuple(sequence) not in globalSnapshots:
                 globalSnapshots.append(tuple(sequence))
@@ -79,35 +77,43 @@ class Client:
         self.broadcastMARKER(sender, payload)
 
     def broadcastMARKER(self, sender, data):
+        threads = []
         stateIndex = self.getStateIndex(data['data'])
         for client in self.outChannel:
             print("{} broadcast states{}'s (tag {}) MARKER to {}".format(
-                self.id, stateIndex, data['data'], client))
-            self.socket.sendMessage(data, clientIPs[client])
+                self.id, stateIndex, data['data'], client),flush=True)
+            threads.append(threading.Thread(target=self.socket.sendMessage,args=(data, clientIPs[client])))
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
 
     def endSnapshot(self, stateIndex):
         with self.lock:
-            finished[globalSnapshots.index(
-                self.states[stateIndex].identifier)].append(self.id)
-            print("{} Ending Snapshot. State identifier {}".format(
-                self.id, self.states[stateIndex].identifier), flush=True)
-            submit_states(self.states[stateIndex].identifier,
-                          self.id, self.states[stateIndex])
+            finished[globalSnapshots.index(self.states[stateIndex].identifier)].append(self.id)
+            print("{} Ending Snapshot {} channelMessages {}".format(self.id, self.states[stateIndex].identifier,
+                                                    self.states[stateIndex].channelMessages), flush=True)
+            if self.states[stateIndex].identifier[0] == self.id:
+                submit_states(self.states[stateIndex].identifier,self.id, self.states[stateIndex].deposit,self.states[stateIndex].channelMessages)
+            else:
+                payload = {'id':self.id,'op':DONE,"data":(self.states[stateIndex].identifier,self.states[stateIndex].deposit,self.states[stateIndex].channelMessages)}
+                self.socket.sendMessage(payload,clientIPs[self.states[stateIndex].identifier[0]])
             self.states.pop(stateIndex)
             self.markersRecv.pop(stateIndex)
 
     def record(self, clientId, transaction):
-        print("{} safe {} corresponding channel message {}".format(
-            self.id, clientId, transaction))
         with self.lock:
+            print("{} safe {} corresponding channel message {}".format(
+                self.id, clientId, transaction),flush=True)
             for i in range(len(self.states)):
+                print("checking record {}\n {}".format(self.states[i].identifier,self.markersRecv[i]),flush=True)
                 if self.markersRecv[i][clientId] == 0:
                     self.states[i].record(
                         self.inChannel.index(clientId), transaction)
 
     def checkRecv(self, stateIndex):
         print("{} recv state {} {}".format(
-            self.id, self.states[stateIndex].identifier, self.markersRecv[stateIndex]))
+            self.id, self.states[stateIndex].identifier, self.markersRecv[stateIndex]),flush=True)
         flag = 0
         for item in self.markersRecv[stateIndex]:
             if item != 1:
@@ -128,7 +134,7 @@ class Client:
             elif data['op'] == MARKER:
                 print("{} received MARKER from {} with tag {}".format(
                     self.id, data['id'], data['data']))
-                self.record(data['id'], (data['id'], data['data']))
+                #self.record(data['id'], (data['id'], data['data']))
                 stateIndex = self.getStateIndex(data['data'])
                 if stateIndex == -1:
                     self.initSnapshot(data['id'], data['data'])
@@ -137,6 +143,11 @@ class Client:
                 else:
                     self.markersRecv[stateIndex][data['id']] = 1
                     self.checkRecv(stateIndex)
+            elif data['op'] == DONE:
+                identifier, deposit, channelMessages = data['data']
+                print("DONE {}".format(identifier),flush=True)
+                identifier = tuple(identifier)
+                submit_states(identifier,data['id'],deposit, channelMessages)
 
     def read(self):
         val = 0
@@ -160,14 +171,13 @@ class Client:
                 else:
                     print("your deposit: {}".format(self.deposit))
                     payload = {'id': self.id, 'op': BANK, 'data': money}
-                    self.socket.sendMessage(payload, clientIPs[val])
                     with self.lock:
                         self.deposit -= money
+                    self.socket.sendMessage(payload, clientIPs[val])
                     print('SUCCESS')
                     print("your deposit: {}".format(self.deposit))
             elif val == 's':
                 val = 0
-                ### tag: (id, clock)
                 self.initSnapshot(self.id, (self.id, self.clock))
                 with self.lock:
                     self.clock += 1
@@ -203,13 +213,13 @@ class Client:
                     print("{} transfer {} to {}".format(
                         self.id, money, operations[2]))
                     payload = {'id': self.id, 'op': BANK, 'data': money}
-                    self.socket.sendMessage(payload, clientIPs[operations[2]])
                     with self.lock:
                         self.deposit -= money
+                    self.socket.sendMessage(payload, clientIPs[operations[2]])
             time.sleep(2)
 
     def run(self):
-        threading.Thread(target=monitor).start()
+        #threading.Thread(target=monitor).start()
         listenThread = threading.Thread(target=self.listen)
         if self.mode == TEST:
             sendThread = threading.Thread(target=self.test)
